@@ -1,4 +1,3 @@
-
 # python3
 
 array0 = ["Federica","Marzio","Laura","Arianna","Viktor","Joan"]
