@@ -1,4 +1,4 @@
-# Mathematical libraries
+# Numerical library
 import numpy as np
 
 def func_eval(time):
@@ -57,17 +57,11 @@ ax.plot(time, cte, 'r-')
 # make the graphic nicer
 ax.set_xlabel('time [s]',fontsize=14)
 ax.set_ylabel('pressure [mmHg]',fontsize=14)
-#ax.set_ylim(bottom=0,top=500)
-#ax.set_xlim(left=1.0,right=1.1)
 for label in (ax.get_xticklabels()+ax.get_yticklabels()):
     label.set_fontsize(14)
 ax.grid(True)
-#ax.legend(loc='upper left',fontsize=14)
 
 plt.show()
-#file output
-#FIGURENAME = 'fitting_py.eps'
-#plt.savefig(FIGURENAME)
 #close graphical tools
 plt.close('all')
 
