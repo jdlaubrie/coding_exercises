@@ -12,8 +12,8 @@ OPTFLAGS= -O3 -fno-strict-aliasing -DNDEBUG
 CXXFLAGS = -fPIC -shared -pthread -Wall $(CYTHONFLAGS) $(OPTFLAGS)
 
 build:
-	$(CYTHON) boolpy2c.pyx
-	$(CXX) $(CXXFLAGS) boolpy2c.cpp -o boolpy2c.so -I. -I$(PYTHON_INCLUDE_PATH) -L$(PYTHON_LD_PATH) -l$(PYTHON_VERSION)
+	$(CYTHON) example_cython.pyx
+	$(CXX) $(CXXFLAGS) example_cython.cpp -o example_cython.so -I. -I$(PYTHON_INCLUDE_PATH) -L$(PYTHON_LD_PATH) -l$(PYTHON_VERSION)
 
 clean:
-	$(REMOVE) boolpy2c.cpp boolpy2c.so
+	$(REMOVE) example_cython.cpp example_cython.so
