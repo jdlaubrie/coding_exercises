@@ -23,14 +23,15 @@ def df_ridders(time):
     CON=1.4
     CON2=CON*CON
     SAFE=2.0
-    if h==0.0:
-        print('h must be nonzero in df_ridders')
-        return
+#    if h==0.0:
+#        print('h must be nonzero in df_ridders')
+#        return
     a = np.zeros((NTAB,NTAB),dtype=np.float64)
     hh=h
     a[0,0] = (func_val(time+hh)-func_val(time-hh))/(2.0*hh)
     err=BIG
-    # Successive columns in the Neville tableau will go to smaller stepsizes and higher orders of extrapolation.
+    # Successive columns in the Neville tableau will go to smaller stepsizes
+    # and higher orders of extrapolation.
     for i in range(1,NTAB):
         hh=hh/CON
         # Try new, smaller stepsize.
@@ -61,6 +62,7 @@ def func_eval(time):
     df,err = df_ridders(time=time)
     return func,df,err
 
+#=======================================================================
 # Test of the Solution method with derivatives from Ridders method
 # time
 final_time = 5.0
@@ -72,15 +74,18 @@ time = np.linspace(0.0,final_time,num=nstep)
 for i in range(nstep):
     func[i],df[i],err[i] = func_eval(time=time[i])
 
-print(err)
+#print(func)
 # making some graphics
 import matplotlib.pyplot as plt
 
 fig,ax = plt.subplots()
 
-ax.plot(time,func)
-ax.plot(time,df)
+ax.plot(time,func,'r',label='f')
+ax.plot(time,df,'o',label='df')
 ax.set_xlabel('time [s]',fontsize=11)
+ax.set_ylabel('flow [L/min]',fontsize=11)
+ax.set_title('graphic')
+ax.legend(loc='upper right')
 ax.grid(True)
 
 fig.tight_layout()

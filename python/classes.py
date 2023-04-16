@@ -6,6 +6,7 @@ class my_class(object):
         self.name = name
         self.age = age
 
-p1 = my_class("Joan",21)
-print(p1)
+#=========Out of the class definition======================
+p1 = my_class("joan",32)
+print(p1.name)
 
