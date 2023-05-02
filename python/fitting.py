@@ -2,63 +2,86 @@
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from scipy.stats import norm, chi2
 
 class Fitting(object):
 
-    def __init__(self, x, y, params, params_bool,
+    def __init__(self, x, y, param0, param_bool,
             sigma2 = None,
-            regression_type = "linear",
+            regression = "linear",
+            analysis = "univariate",
             maximum_iterations=50,
             marquardt_tolerance=5.0e-2,
             funcs = None):
 
-        self.regression_type = regression_type
+        self.regression = regression
+        self.analysis = analysis
         self.maximum_iterations = maximum_iterations
         self.marquardt_tolerance = marquardt_tolerance
 
+        if funcs == None and regression == "nonlinear":
+            print("As the function is void, a Fung model is set.")
+            funcs = self.FungOrthotropic
+
+        param, covariance = self.CurveFit(x, y, param0, param_bool, funcs, 
+                                                                        sigma2)
+
+        self.DeterminationCoefficient(x, y, param, funcs)
+        self.CorrelationAssessment(param, param_bool, covariance)
+        residual = self.ResidualAnalysis(x, y, param, funcs)
+        #if self.analysis == "univariate":
+        #    self.BootstrapingUni(x, y, residual, param0, param, params_bool,
+        #                                                                 funcs)
+        #elif self.analysis == "multivariate":
+        #    self.BootstrapingMulti(x, y, residual, param0, param, params_bool,
+        #                                                                 funcs)
+        self.MakePlots(x, y, param, funcs)
+
+#==============================================================================#
+    def CurveFit(self, x, y, param0, param_bool, funcs, sigma2=None):
+
         if sigma2 == None:
             compute_variance = True
+            ntrial = 2
             if len(y.shape) == 1:
                 sigma2 = 1.0
             else:
                 sigma2 = np.eye(y.shape[1],dtype=np.float64)
+        else:
+            compute_variance = False
+            ntrial = 1
 
-        for i in range(2):
-            print("Try to get parameters, number = {}".format(i))
-            if self.regression_type == "linear":
+        for i in range(ntrial):
+            print("===========================================================")
+            print("Trial number {} to get parameters".format(i))
+            if self.regression == "linear":
                 print("Performing linear regression of the data.")
                 if len(y.shape) == 1:
                     print("The linear regression is univariate.")
-                    params, covariance, chi_square = self.LinearRegressionUni(x, y, sigma2)
+                    param, cov, chi_square = self.LinearRegressionUni(x, y, 
+                                                                        sigma2)
                 else:
                     print("The linear regression is multivariate.")
-                    params, covariance, chi_square = self.LinearRegressionMulti(x, y, sigma2)
-            elif self.regression_type == "nonlinear":
+                    param, cov, chi_square = self.LinearRegressionMulti(x, y, 
+                                                                        sigma2)
+            elif self.regression == "nonlinear":
                 print("Performing non-linear regression of the data.")
-                params, covariance, chi_square = self.NonLinearRegression(x, y,
-                            sigma2, params, params_bool, self.FungOrthotropic)
+                param, cov, chi_square = self.NonLinearRegression(x, y, sigma2, 
+                                                     param0, param_bool, funcs)
             else:
                 raise ValueError("Regression type not understood.")
 
-            print("The parameters are: \n{}".format(params))
-            print("The covariance is: \n{}".format(covariance))
+            print("The parameters are: \n{}".format(param))
+            #print("The covariance is: \n{}".format(cov))
             print("chi-square is: {}".format(chi_square))
 
             if compute_variance:
-                sigma2 = self.GetEstimatedVariance(x, y, params, self.FungOrthotropic)
+                sigma2 = self.GetEstimatedVariance(x, y, param, funcs)
                 print("The estimated variance is: \n{}".format(sigma2))
-                print("-------------------------------------------------------")
                 compute_variance = False
-            else:
-                sigma2 = self.GetEstimatedVariance(x, y, params, self.FungOrthotropic)
-                print("The estimated variance is: \n{}".format(sigma2))
-                print("-------------------------------------------------------")
-                break
 
-        self.CorrelationAssessment(params, params_bool, covariance)
-        self.DeterminationCoefficient(y, params, self.FungOrthotropic)
-        self.ResidualAnalysis(x, y, params, self.FungOrthotropic)
-        self.MakePlots(x, y, params, self.FungOrthotropic)
+        return param, cov
 
 #==============================================================================#
     """Linear functions for the univariate and multivariate cases"""
@@ -270,7 +293,7 @@ class Fitting(object):
 
         return param, covariance, chi_square
 
-#------------------------------------------------------------------------------#
+#==============================================================================#
     def NonLinearRegression(self, x, y, sigma2, param, param_bool, funcs):
         """mrqmin: Levenberg-Marquardt method for fitting nonlinear
         models.
@@ -291,9 +314,9 @@ class Fitting(object):
         nparam = param.shape[0]    # number of coefficients in the function
 
         # set the number of coefficients to fit
-        mfit = 0  # counter for the number of coeffcients to fit
-        for j in range(nparam):
-            if param_bool[j]: mfit += 1  # verify if ia[j] is True
+        mfit = np.sum(param_bool)  # counter for the number of coeffcients to fit
+        #for j in range(nparam):
+        #    if param_bool[j]: mfit += 1  # verify if ia[j] is True
 
         # compute the inverse of variance matrix
         sigma2_inv = np.linalg.inv(sigma2)
@@ -371,7 +394,7 @@ class Fitting(object):
 
         return param, covariance, ochisq
 
-#------------------------------------------------------------------------------#
+#==============================================================================#
     def ChiSquareVariations(self, x, y, sigma2_inv, param, param_bool, funcs):
         """mrqcof: used by mrqmin to evaluate the linearized fitting matrix
         alpha, and the vector beta, and calculate chisq"""
@@ -420,7 +443,7 @@ class Fitting(object):
         
         return hessian, gradient, chi_square
 
-#------------------------------------------------------------------------------#
+#==============================================================================#
     def CovarianceMatrix(self, alpha_inv, param_bool):
         """covsrt: spread the covariances back into the full nparam*nparam
         covariance matrix. Covariance computed for the parameters."""
@@ -443,7 +466,7 @@ class Fitting(object):
 
         return covariance
 
-#------------------------------------------------------------------------------#
+#==============================================================================#
     def GetEstimatedVariance(self, x, y, param, funcs):
 
         nparam = param.shape[0]     # number of coefficients in the function
@@ -451,14 +474,12 @@ class Fitting(object):
 
         if len(y.shape) == 1:
             f_model, _ = funcs(x,*param)
+            error = y - f_model
 
             sigma2 = np.dot(error,error)
             sigma2 /= (ndata-nparam)
 
         else:
-            ndata = y.shape[0]     # number of coefficients in the function
-            nparam = param.shape[0]     # number of coefficients in the function
-
             f_model, _ = funcs(x,*param)
             error = y - f_model
 
@@ -467,7 +488,7 @@ class Fitting(object):
 
         return sigma2
 
-#------------------------------------------------------------------------------#
+#==============================================================================#
     def CorrelationAssessment(self, params, param_bool, covariance):
 
         nparam = params.shape[0]
@@ -491,21 +512,19 @@ class Fitting(object):
             is_overparameter = False
 
         print("This is the correlation: \n{}".format(correlation))
-        print("Assess over-parameterization: {}, det(R)={}".format(is_overparameter,
-                                                        determinant))
+        print("Over-parameterization: {}, ".format(is_overparameter) + \
+              "det(R) = {}".format(determinant) )
 
-#--------------------------------------------------------------------------
-    def DeterminationCoefficient(self, y, params, funcs):
+#==============================================================================#
+    def DeterminationCoefficient(self, x, y, params, funcs):
 
         from sklearn.metrics import r2_score
         y_pred, _ = funcs(x, *params)
         determination = r2_score(y, y_pred, multioutput='raw_values')
         print("Determination Coefficient R2: {}".format(determination))
 
-#--------------------------------------------------------------------------
+#==============================================================================#
     def ResidualAnalysis(self, x, y, params, funcs):
-
-        import statsmodels.api as sm
 
         error = y - funcs(x, *params)[0]
 
@@ -549,7 +568,191 @@ class Fitting(object):
         #close graphical tools
         plt.close('all')
 
-#--------------------------------------------------------------------------
+        return error
+
+#==============================================================================#
+    def BootstrapingUni(self, x, y, residual, param0, param, param_bool, funcs, 
+                                                             around_func=True):
+
+        ndata = x.shape[0]
+        nparam = param0.shape[0]
+        conf = 0.95
+        nboot = 100
+
+        # creates bootstrap residuals
+        boot_res = np.random.choice(residual,(nboot,ndata))
+        boot_y = np.zeros((nboot,ndata),dtype=np.float64)
+        boot_opt = np.zeros((nboot,nparam),dtype=np.float64)
+        if around_func:
+            for i in range(nboot):
+                boot_y[i,:] = boot_res[i,:] + funcs(x,*param)
+                boot_opt[i,:], _ = curve_fit(funcs, x, boot_y[i,:],
+                                             p0=param0)
+        else:
+            for i in range(nboot):
+                boot_y[i,:] = boot_res[i,:] + y
+                boot_opt[i,:], _ = curve_fit(funcs, x, boot_y[i,:],
+                                             p0=param0)
+
+        boot_mean = np.mean(boot_opt,axis=0)
+        boot_std = np.std(boot_opt, axis=0, ddof=1)
+        boot_cov = np.cov(boot_opt.transpose())
+
+        print("\nBootstrap mean = {}".format(boot_mean))
+        print("Bootstrap std = {}".format(boot_std))
+
+        z = np.linspace(boot_mean-3.*boot_std,boot_mean+3.*boot_std,100)
+
+        # assumed normal distribution for bootstrap data
+        dist0 = norm(loc=boot_mean, scale=boot_std)
+        interval0 = dist0.interval(conf)
+        p_value0 = dist0.cdf(param)
+
+        # boot_mean + norm(conf)*boot_std
+        print("\nSeparate confidence interval ({}) ".format(conf*100.) +\
+              "= \n{}".format(interval0))
+        print("The p-values are = {}".format(p_value0))
+
+        # multivariate test
+        dist3 = chi2(nparam)
+        diff = boot_mean - param
+        boot_cov_inv = np.linalg.inv(boot_cov)
+        z_square = np.einsum('i,ij,j',diff,boot_cov_inv,diff)
+        print("\nZ-squared (multivariate test) = {}".format(z_square))
+        print("chi-squared at {} ".format(100.*conf/2.) +\
+          "= {}".format(dist3.ppf(conf/2.)) )
+        #print("P-value of test = {}".format(dist3.cdf(z_square)))
+
+#------------------------------------------------------------------------------#
+        factor = nboot*boot_std/np.sqrt(ndata)
+        fig, ax = plt.subplots(2,2, figsize=plt.figaspect(0.5))
+
+        # data distribution
+        ax[0,0].hist(boot_opt[:,0], bins=15)
+        ax[0,0].plot(z[:,0], factor[0]*dist0.pdf(z)[:,0])
+        # QQplot for error 1
+        sm.graphics.qqplot(boot_opt[:,0], line='s', ax=ax[1,0])
+
+        # data distribution
+        ax[0,1].hist(boot_opt[:,1], bins=15)
+        ax[0,1].plot(z[:,1], factor[1]*dist0.pdf(z)[:,1])
+        # QQplot for error 1
+        sm.graphics.qqplot(boot_opt[:,1], line='s', ax=ax[1,1])
+
+        fig.tight_layout()
+        plt.show
+        FIGURENAME = 'bootstrap.png'
+        plt.savefig(FIGURENAME)
+        plt.close('all')
+
+#------------------------------------------------------------------------------#
+        fig, ax = plt.subplots()
+
+        # data distribution
+        for i in range(nboot):
+            ax.scatter(x, boot_y[i,:])
+        ax.plot(x, y, marker='*', color='red', label='exp')
+        ax.plot(x, funcs(x, *param), label='fit')
+        ax.legend(loc='upper left')
+
+        fig.tight_layout()
+        plt.show
+        FIGURENAME = 'bootstrap_fit.png'
+        plt.savefig(FIGURENAME)
+        plt.close('all')
+
+#==============================================================================#
+    def BootstrapingMulti(self, x, y, residual, param0, param, param_bool, funcs, 
+                                                             around_func=True):
+
+        ndata = x.shape[0]
+        nfunc = y.shape[1]
+        nparam = param0.shape[0]
+        mfit = np.sum(param_bool)
+        conf = 0.95
+        nboot = 100
+
+        # creates bootstrap residuals
+        boot_res = np.zeros((nboot,ndata,nfunc),dtype=np.float64)
+        for i in range(nfunc):
+            boot_res[:,:,i] = np.random.choice(residual[:,i],(nboot,ndata))
+        boot_y = np.zeros((nboot,ndata,nfunc),dtype=np.float64)
+        boot_opt0 = np.zeros((nboot,nparam),dtype=np.float64)
+        if around_func:
+            for i in range(nboot):
+                boot_y[i,:,:] = boot_res[i,:,:] + funcs(x, *param)[0]
+                boot_opt0[i,:], _ = self.CurveFit(x, boot_y[i,:,:], param0,
+                                                     param_bool, funcs)
+        else:
+            for i in range(nboot):
+                boot_y[i,:,:] = boot_res[i,:,:] + y
+                boot_opt0[i,:], _ = self.CurveFit(x, boot_y[i,:,:], param0,
+                                                     param_bool, funcs)
+
+        boot_opt = boot_opt0[:,param_bool]
+        boot_mean = np.mean(boot_opt,axis=0)
+        boot_std = np.std(boot_opt, axis=0, ddof=1)
+        boot_cov = np.cov(boot_opt.transpose())
+
+        print("\nBootstrap mean = {}".format(boot_mean))
+        print("Bootstrap std = {}".format(boot_std))
+
+        z = np.linspace(boot_mean-3.*boot_std,boot_mean+3.*boot_std,100)
+
+        # assumed normal distribution for bootstrap data
+        dist0 = norm(loc=boot_mean, scale=boot_std)
+        interval0 = dist0.interval(conf)
+        p_value0 = dist0.cdf(param[param_bool])
+
+        # boot_mean + norm(conf)*boot_std
+        print("\nSeparate confidence interval ({}) ".format(conf*100.) +\
+              "= \n{}".format(interval0))
+        print("The p-values are = {}".format(p_value0))
+
+        # multivariate test
+        dist3 = chi2(mfit)
+        diff = boot_mean - param[param_bool]
+        boot_cov_inv = np.linalg.inv(boot_cov)
+        z_square = np.einsum('i,ij,j',diff,boot_cov_inv,diff)
+        print("\nZ-squared (multivariate test) = {}".format(z_square))
+        print("chi-squared at {} ".format(100.*conf/2.) +\
+          "= {}".format(dist3.ppf(conf/2.)) )
+        #print("P-value of test = {}".format(dist3.cdf(z_square)))
+
+#------------------------------------------------------------------------------#
+        factor = nboot*boot_std/np.sqrt(ndata)
+        fig, ax = plt.subplots(2,mfit, figsize=plt.figaspect(0.5))
+
+        for i in range(mfit):
+            # data distribution
+            ax[0,i].hist(boot_opt[:,i], bins=15)
+            ax[0,i].plot(z[:,i], factor[i]*dist0.pdf(z)[:,i])
+            # QQplot for error 1
+            sm.graphics.qqplot(boot_opt[:,i], line='s', ax=ax[1,i])
+
+        fig.tight_layout()
+        plt.show
+        FIGURENAME = 'bootstrap.png'
+        plt.savefig(FIGURENAME)
+        plt.close('all')
+
+#------------------------------------------------------------------------------#
+        fig, ax = plt.subplots()
+
+        # data distribution
+        for i in range(nboot):
+            ax.scatter(x, boot_y[i,:,:])
+        ax.plot(x, y, marker='*', color='red', label='exp')
+        ax.plot(x, funcs(x, *param)[0], label='fit')
+        ax.legend(loc='upper left')
+
+        fig.tight_layout()
+        plt.show
+        FIGURENAME = 'bootstrap_fit.png'
+        plt.savefig(FIGURENAME)
+        plt.close('all')
+
+#==============================================================================#
     def MakePlots(self, x, y, params, funcs):
         """This is a function to make a general plot of the fitting"""
 
@@ -624,9 +827,9 @@ class Fitting(object):
 x = np.array([[1.041, 1.059, 1.098, 1.119, 1.131, 1.140, 1.148, 1.153, 1.157,
         1.162, 1.166],[1.020, 1.029, 1.046, 1.056, 1.063, 1.068, 1.071, 1.075,
         1.077, 1.080, 1.081]], dtype=np.float64)
-y = np.array([[10.714, 19.898, 39.796, 60.204, 79.592, 100.0, 119.898,
-        139.796, 160.204, 180.102, 198.980],[11.224, 19.388, 39.796, 59.694,
-        80.102, 100.0, 119.898, 140.306, 159.694, 180.102, 199.490]], 
+y = np.array([[10.0, 20.0, 40.0, 60.0, 80.0, 100.0, 120.0,
+        140.0, 160.0, 180.0, 200.0],[10.0, 20.0, 40.0, 60.0,
+        80.0, 100.0, 120.0, 140.0, 160.0, 180.0, 200.0]], 
         dtype=np.float64)
 
 # insert always x and y with the ndata in the first index 
@@ -640,5 +843,7 @@ y[:,1] *= x[:,1]
 params = np.array([10.0,1.0,1.0,0.0,0.0,0.0,0.0],dtype=np.float64)
 params_bool = np.array([True,True,True,False,True,False,False],dtype=bool)
 
-fitting = Fitting(x, y, params, params_bool, regression_type="nonlinear")
+fitting = Fitting(x, y, params, params_bool,
+                    regression="nonlinear",
+                    analysis="multivariate")
 
